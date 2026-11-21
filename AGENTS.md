@@ -69,3 +69,6 @@ Database: PostgreSQL everywhere (the platform's in development, previews and sta
 
 ## Lessons (updated by the platform after each sprint retro)
 - (none yet)
+
+## Lessons — Retro — E2E
+- Lessons reach main through a PR

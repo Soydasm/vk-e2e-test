@@ -1,0 +1,14 @@
+# Kept out of the image builds: installed packages are installed inside the image, for its own platform.
+.git
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.env
+**/.env.*
+!**/.env.example
+apps/web/dist
+apps/web/.expo
+apps/web/test-results
+apps/web/playwright-report
+apps/api/staticfiles

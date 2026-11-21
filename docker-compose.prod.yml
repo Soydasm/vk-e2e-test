@@ -1,0 +1,49 @@
+# A rehearsal of the live setup on your own machine: the same two images the live environment runs, a
+# database, and the migration before the API starts.
+#
+#   docker compose -f docker-compose.prod.yml up --build
+#   http://localhost:8080          the web app
+#   http://localhost:8080/healthz  {"status": "ok", ...}
+#
+# Every value below is a local stand-in. Live values are set in the live environment (Render asks for them
+# on its own screen), never in this repository.
+x-api-env: &api-env
+  DATABASE_URL: postgres://app:app@db:5432/app
+  SECRET_KEY: local-rehearsal-only-this-is-not-a-live-secret
+  ALLOWED_HOSTS: localhost,127.0.0.1
+  SECURE_SSL_REDIRECT: "False"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: app, POSTGRES_PASSWORD: app, POSTGRES_DB: app }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build: { context: ., dockerfile: infra/Dockerfile.api }
+    image: vk-e2e-api:local
+    command: ["python", "manage.py", "migrate", "--noinput"]
+    environment: *api-env
+    depends_on:
+      db: { condition: service_healthy }
+
+  api:
+    # the same build as `migrate` (one image; the second build is all cache), so `up` never tries to pull it
+    build: { context: ., dockerfile: infra/Dockerfile.api }
+    image: vk-e2e-api:local
+    environment: *api-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    build: { context: ., dockerfile: infra/Dockerfile.web }
+    image: vk-e2e-web:local
+    environment:
+      API_UPSTREAM: api:8000
+      PUBLIC_SCHEME: http
+    ports: ["8080:8080"]
+    depends_on: [api]

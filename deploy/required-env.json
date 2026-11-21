@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "comment": "Live keys by name and rule. No values: they live only in the live environment. Written by VibeKaizen; not edited by hand.",
+  "keys": [
+    {
+      "name": "SECRET_KEY",
+      "service": "api",
+      "secret": true,
+      "source": "generated",
+      "rules": {
+        "min_length": 32,
+        "must_not_equal": [
+          "dev-secret-not-for-production",
+          "dev-secret",
+          "change-me",
+          "ci-secret"
+        ]
+      },
+      "description": "Django's signing key. Generated once by the live host; never reused from development."
+    },
+    {
+      "name": "DATABASE_URL",
+      "service": "api",
+      "secret": true,
+      "source": "database",
+      "rules": {
+        "must_start_with": [
+          "postgres://",
+          "postgresql://"
+        ],
+        "must_not_contain": [
+          "localhost",
+          "127.0.0.1"
+        ]
+      },
+      "description": "The live PostgreSQL database, provided by the live host."
+    },
+    {
+      "name": "ALLOWED_HOSTS",
+      "service": "api",
+      "secret": false,
+      "source": "template",
+      "rules": {},
+      "description": "Host names the API answers on. Behind the web proxy on a private network: written by the deploy template."
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "VK E2E",
+    "slug": "vk-e2e",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "platforms": ["web"],
+    "scheme": "vk-e2e",
+    "plugins": ["expo-router"],
+    "web": { "bundler": "metro", "output": "single" }
+  }
+}

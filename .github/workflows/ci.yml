@@ -1,0 +1,75 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: app, POSTGRES_PASSWORD: app, POSTGRES_DB: app }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U app" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://app:app@localhost:5432/app
+      SECRET_KEY: ci-secret
+      DEBUG: 'False'
+      ALLOWED_HOSTS: '*'
+    defaults:
+      run: { working-directory: apps/api }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -r requirements/development.txt
+      - run: python manage.py migrate --noinput
+      - run: pytest -q
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: apps/web }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+
+  # The live images, built and started the way the live environment runs them, on every change to main:
+  # main is what gets released, so a Dockerfile, a dependency or an export that no longer builds is found
+  # here and not on the day of a release. Not on pull requests, which it would only slow down.
+  images:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start (docker-compose.prod.yml)
+        run: docker compose -f docker-compose.prod.yml up --build --detach
+      - name: /healthz through the web image
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/healthz; then echo; exit 0; fi
+            sleep 2
+          done
+          docker compose -f docker-compose.prod.yml ps
+          docker compose -f docker-compose.prod.yml logs --tail 80
+          exit 1
+      - name: The web app is served
+        run: curl -fsS http://localhost:8080/ | grep -qi '<html'
+      - name: Without its live keys the API refuses to start, and names them
+        run: |
+          set +e
+          out=$(docker compose -f docker-compose.prod.yml run --rm --no-deps -e SECRET_KEY= -e DATABASE_URL= \
+                api python manage.py check 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          [ "$code" -ne 0 ] && echo "$out" | grep -q 'SECRET_KEY is not set' && echo "$out" | grep -q 'DATABASE_URL is not set'
+      - name: Stop
+        if: always()
+        run: docker compose -f docker-compose.prod.yml down --volumes

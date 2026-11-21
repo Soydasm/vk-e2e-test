@@ -1,0 +1,29 @@
+# The live web image: the web app exported once (`expo export`) and served by Caddy, which also passes the
+# API's paths to the API. The page and the API share one origin, so the export needs no API address
+# (EXPO_PUBLIC_API_URL stays empty) and the same image runs on every host name and every target.
+FROM node:20-slim AS build
+WORKDIR /app
+COPY apps/web/package.json apps/web/package-lock.json* /app/
+RUN if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+COPY apps/web /app
+ARG EXPO_PUBLIC_API_URL=""
+ENV EXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL}
+RUN npx expo export --platform web --output-dir /app/dist
+
+FROM caddy:2-alpine
+COPY infra/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/dist /srv
+# A live host's sandbox (Render) refuses to exec a binary that carries Linux file capabilities: the official
+# image sets cap_net_bind_service on /usr/bin/caddy so it can bind 80/443, and execve then returns EPERM
+# ("operation not permitted"). We serve on the unprivileged $PORT, so the capability is not needed; copying
+# the binary to a fresh inode drops the security.capability xattr (busybox cp does not carry xattrs).
+RUN cp /usr/bin/caddy /usr/bin/caddy.nocap \
+ && rm /usr/bin/caddy \
+ && mv /usr/bin/caddy.nocap /usr/bin/caddy \
+ && chmod 0755 /usr/bin/caddy
+# PORT: Render sets its own; API_UPSTREAM: the API's host:port; PUBLIC_SCHEME: what visitors use (TLS ends
+# in front of this container on a live host; the local rehearsal sets http).
+ENV PORT=8080 \
+    API_UPSTREAM=api:8000 \
+    PUBLIC_SCHEME=https
+EXPOSE 8080
